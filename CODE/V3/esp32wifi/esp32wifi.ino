@@ -28,7 +28,7 @@ void handleUDPPacket(AsyncUDPPacket packet) {
   
   float processingTime = (sendTime - receiveTime) / 1000.0;
   String message = String((char*)packet.data());
-  Serial.println("Echo: " + message + " Latency: " + String(processingTime) + " ms");
+  Serial.println(String(processingTime) + " ms" + " | " + "Echo: " + message);
 }
 
 void setupUDP() {

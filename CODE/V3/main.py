@@ -3,9 +3,35 @@ import socket
 import statistics
 from time import perf_counter_ns
 
-HOST = "192.168.1.109"  # Replace with your ESP32's IP address
-PORT = 11112
+UDP_PORT = 11112
+BROADCAST_IP = '255.255.255.255'
 ITERATIONS = 50
+
+async def discover_devices():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.settimeout(2)
+
+    print("Discovering ESP32 devices...")
+    sock.sendto("DISCOVER".encode(), (BROADCAST_IP, UDP_PORT))
+
+    devices = []
+    try:
+        while True:
+            data, addr = sock.recvfrom(1024)
+            if data.startswith(b'ESP32:'):
+                ip = data.decode().split(':')[1]
+                devices.append((ip, addr[1]))
+                print(f"Found ESP32 at {ip}")
+            else:
+                print(f"Received unknown response: {data} from {addr}")
+    except socket.timeout:
+        print("Discovery timeout.")
+    except Exception as e:
+        print(f"Error: {e}")
+
+    sock.close()
+    return devices
 
 async def send_and_receive(sock, message, addr):
     send_time = perf_counter_ns()
@@ -45,15 +71,31 @@ def print_statistics(latencies):
         print("No valid latency measurements")
 
 async def main():
+    devices = await discover_devices()
+    if not devices:
+        print("No ESP32 devices found.")
+        return
+
+    print("\nAvailable devices:")
+    for i, (ip, port) in enumerate(devices):
+        print(f"{i + 1}. {ip}:{port}")
+
+    choice = int(input("Select a device to connect to (enter the number): ")) - 1
+    if choice < 0 or choice >= len(devices):
+        print("Invalid choice.")
+        return
+
+    target_ip, target_port = devices[choice]
+    print(f"Connecting to {target_ip}:{target_port}")
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(1)  # Set a 1-second timeout
+    sock.settimeout(10)  # Set a 1-second timeout
 
     while True:
         message = input("Enter message to send (or 'quit' to exit): ")
         if message.lower() == 'quit':
             break
-
-        latencies = await measure_latency(sock, message, (HOST, PORT))
+        latencies = await measure_latency(sock, message, (target_ip, target_port))
         print_statistics(latencies)
 
     sock.close()
