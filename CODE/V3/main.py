@@ -42,36 +42,28 @@ async def discover_devices(devices):
                 print(f"Error: {e}")
             await asyncio.sleep(0.1)
 
-async def send_and_receive(sock, message, addr):
-    send_time = perf_counter_ns()
-    sock.sendto(message.encode(), addr)
-    try:
-        data, _ = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
-        receive_time = perf_counter_ns()
-        rtt = (receive_time - send_time) / 1e6  # Convert to milliseconds
-        return data.decode(), rtt
-    except socket.timeout:
-        return None, None
-
-async def measure_latency(sock, message, addr):
+async def latency_test(sock, message, addr, iterations=ITERATIONS):
     latencies = []
-    for _ in range(ITERATIONS):
-        data, rtt = await send_and_receive(sock, message, addr)
-        if data:
-            latencies.append(rtt)
-            print(f"Received: {data}, RTT: {rtt:.3f} ms")
-        else:
-            print("Timeout: No response received")
-    return latencies
 
-def print_statistics(latencies):
+    for _ in range(iterations):
+        send_time = perf_counter_ns()
+        sock.sendto(message.encode(), addr)
+        try:
+            data, _ = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+            receive_time = perf_counter_ns()
+            rtt = (receive_time - send_time) / 1e6  # Convert to milliseconds
+            latencies.append(rtt)
+            print(f"Received: {data.decode()}, RTT: {rtt:.3f} ms")
+        except socket.timeout:
+            print("Timeout: No response received")
+    
     if latencies:
         avg_latency = statistics.mean(latencies)
         min_latency = min(latencies)
         max_latency = max(latencies)
         std_dev = statistics.stdev(latencies) if len(latencies) > 1 else 0
-        
-        print(f"\nLatency statistics over {ITERATIONS} iterations:")
+
+        print(f"\nLatency statistics over {iterations} iterations:")
         print(f"Average: {avg_latency:.3f} ms")
         print(f"Minimum: {min_latency:.3f} ms")
         print(f"Maximum: {max_latency:.3f} ms")
@@ -107,12 +99,15 @@ async def main():
         if message.lower() == 'q':
             break
         elif not message:
+            print("\033[2J\033[H", end="")
             continue
         elif message == "cls":
             print("\033[2J\033[H", end="")
             continue
-        latencies = await measure_latency(sock, message, (target_ip, target_port))
-        print_statistics(latencies)
+        elif message == "test":
+            await latency_test(sock, "PING", (target_ip, target_port))
+        else:
+            continue
 
     sock.close()
 
