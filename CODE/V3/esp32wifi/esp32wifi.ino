@@ -31,7 +31,7 @@ void handleUDPPacket(AsyncUDPPacket packet) {
   if (UDPMessage.length() == 0) return;
   String response;
 
-  Serial.println("Received: " + UDPMessage);
+  //Serial.println("Received: " + UDPMessage);  // For Debug
   
   if (UDPMessage == "DISCOVER") {
     response = "ESP32:" + String(deviceName) + ":" + WiFi.localIP().toString();
