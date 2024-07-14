@@ -7,15 +7,15 @@ const char* password = Secret_Wifi_PASS;
 const uint16_t UDP_PORT = 11112;
 
 AsyncUDP udp;
+const char* deviceName = "ESP32_1"; // Change this to your device name
 
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-  if (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    Serial.println("WiFi Failed");
-    while (1) {
-      delay(1000);
-    }
+  Serial.println("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println(".");
   }
   Serial.print("Connected to WiFi. IP: ");
   Serial.println(WiFi.localIP());
@@ -23,7 +23,7 @@ void setupWiFi() {
 
 void handleUDPPacket(AsyncUDPPacket packet) {
   if (strncmp((char*)packet.data(), "DISCOVER", packet.length()) == 0) {
-    String response = "ESP32:" + WiFi.localIP().toString();
+    String response = "ESP32:" + String(deviceName) + ":" + WiFi.localIP().toString();
     packet.printf(response.c_str());
     Serial.println("DISCOVERED: " + response);
   } else {

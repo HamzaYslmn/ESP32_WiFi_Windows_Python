@@ -26,18 +26,20 @@ async def discover_devices(devices):
             try:
                 data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
                 if data.startswith(b'ESP32:'):
-                    ip = data.decode().split(':')[1]
-                    if (ip, addr[1]) not in devices:
-                        devices.append((ip, addr[1]))
+                    parts = data.decode().split(':')
+                    device_name = parts[1]
+                    ip = parts[2]
+                    if (device_name, ip, addr[1]) not in devices:
+                        devices.append((device_name, ip, addr[1]))
                         print("\033[2J\033[H", end="")  # Clear the console
                         print("Available devices:")
-                        for i, (dev_ip, dev_port) in enumerate(devices):
-                            print(f"{i + 1}. {dev_ip}:{dev_port}")
+                        for i, (dev_name, dev_ip, dev_port) in enumerate(devices):
+                            print(f"{i + 1}. {dev_name} ({dev_ip}:{dev_port})")
                         print("\nSelect a device (number) or press Enter to continue: ", end="", flush=True)
             except socket.timeout:
                 pass
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error: {e}")
             await asyncio.sleep(0.1)
 
 async def send_and_receive(sock, message, addr):
@@ -94,8 +96,8 @@ async def main():
             print("Invalid input. Enter a number.")
 
     discovery_task.cancel()
-    target_ip, target_port = devices[choice]
-    print(f"Connecting to {target_ip}:{target_port}")
+    target_name, target_ip, target_port = devices[choice]
+    print(f"Connecting to {target_name} ({target_ip}:{target_port})")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(10)  # Set a 10-second timeout
