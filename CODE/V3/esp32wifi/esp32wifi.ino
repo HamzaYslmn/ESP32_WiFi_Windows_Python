@@ -22,18 +22,29 @@ void setupWiFi() {
 }
 
 void handleUDPPacket(AsyncUDPPacket packet) {
-  if (strncmp((char*)packet.data(), "DISCOVER", packet.length()) == 0) {
-    String response = "ESP32:" + String(deviceName) + ":" + WiFi.localIP().toString();
+  // udp.writeTo("Some data to send", strlen("Some data to send"), IPAddress(192, 168, 1, 100), 1234);  // Example of sending data to a specific IP
+  // packet.printf("Some data to send");  // Example of sending data back to the sender
+
+  uint32_t receiveTime = micros();
+
+  String UDPMessage = String((char*)packet.data(), packet.length());
+  if (UDPMessage.length() == 0) return;
+  String response;
+
+  Serial.println("Received: " + UDPMessage);
+  
+  if (UDPMessage == "DISCOVER") {
+    response = "ESP32:" + String(deviceName) + ":" + WiFi.localIP().toString();
     packet.printf(response.c_str());
     Serial.println("DISCOVERED: " + response);
   } else {
-    uint32_t receiveTime = micros();
-    udp.writeTo(packet.data(), packet.length(), packet.remoteIP(), packet.remotePort());
+    response = "Echo: " + UDPMessage;
+    packet.printf(response.c_str());
+
     uint32_t sendTime = micros();
-    
     float processingTime = (sendTime - receiveTime) / 1000.0;
-    String message = String((char*)packet.data());
-    Serial.println(String(processingTime) + " ms" + " | " + "Echo: " + message);
+    
+    Serial.println(String(processingTime) + " ms" + " | " + "Echo: " + UDPMessage);
   }
 }
 

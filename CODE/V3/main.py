@@ -103,9 +103,14 @@ async def main():
     sock.settimeout(10)  # Set a 10-second timeout
 
     while True:
-        message = input("Enter message to send (or 'quit' to exit): ")
-        if message.lower() == 'quit':
+        message = input("Enter message to send (or 'q' to exit): ")
+        if message.lower() == 'q':
             break
+        elif not message:
+            continue
+        elif message == "cls":
+            print("\033[2J\033[H", end="")
+            continue
         latencies = await measure_latency(sock, message, (target_ip, target_port))
         print_statistics(latencies)
 
