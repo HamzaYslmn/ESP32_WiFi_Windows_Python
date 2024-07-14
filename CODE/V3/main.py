@@ -5,33 +5,40 @@ from time import perf_counter_ns
 
 UDP_PORT = 11112
 BROADCAST_IP = '255.255.255.255'
+DISCOVERY_INTERVAL = 15  # Interval in seconds between each discovery broadcast
+BROADCAST_COUNT = 10  # Number of discovery messages to send in each broadcast
 ITERATIONS = 50
 
-async def discover_devices():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.settimeout(2)
-
-    print("Discovering ESP32 devices...")
+async def send_discover(sock):
     sock.sendto("DISCOVER".encode(), (BROADCAST_IP, UDP_PORT))
 
-    devices = []
-    try:
-        while True:
-            data, addr = sock.recvfrom(1024)
-            if data.startswith(b'ESP32:'):
-                ip = data.decode().split(':')[1]
-                devices.append((ip, addr[1]))
-                print(f"Found ESP32 at {ip}")
-            else:
-                print(f"Received unknown response: {data} from {addr}")
-    except socket.timeout:
-        print("Discovery timeout.")
-    except Exception as e:
-        print(f"Error: {e}")
+async def discover_devices(devices):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.settimeout(0.5)
 
-    sock.close()
-    return devices
+    while True:
+        tasks = [asyncio.create_task(send_discover(sock)) for _ in range(BROADCAST_COUNT)]
+        await asyncio.gather(*tasks)
+
+        start_time = asyncio.get_event_loop().time()
+        while asyncio.get_event_loop().time() - start_time < DISCOVERY_INTERVAL:
+            try:
+                data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+                if data.startswith(b'ESP32:'):
+                    ip = data.decode().split(':')[1]
+                    if (ip, addr[1]) not in devices:
+                        devices.append((ip, addr[1]))
+                        print("\033[2J\033[H", end="")  # Clear the console
+                        print("Available devices:")
+                        for i, (dev_ip, dev_port) in enumerate(devices):
+                            print(f"{i + 1}. {dev_ip}:{dev_port}")
+                        print("\nSelect a device (number) or press Enter to continue: ", end="", flush=True)
+            except socket.timeout:
+                pass
+            except Exception:
+                pass
+            await asyncio.sleep(0.1)
 
 async def send_and_receive(sock, message, addr):
     send_time = perf_counter_ns()
@@ -71,20 +78,22 @@ def print_statistics(latencies):
         print("No valid latency measurements")
 
 async def main():
-    devices = await discover_devices()
-    if not devices:
-        print("No ESP32 devices found.")
-        return
+    devices = []
+    discovery_task = asyncio.create_task(discover_devices(devices))
 
-    print("\nAvailable devices:")
-    for i, (ip, port) in enumerate(devices):
-        print(f"{i + 1}. {ip}:{port}")
+    while True:
+        choice = await asyncio.get_event_loop().run_in_executor(None, input, "")
+        if choice == "":
+            continue
+        try:
+            choice = int(choice) - 1
+            if 0 <= choice < len(devices):
+                break
+            print("Invalid choice. Try again.")
+        except ValueError:
+            print("Invalid input. Enter a number.")
 
-    choice = int(input("Select a device to connect to (enter the number): ")) - 1
-    if choice < 0 or choice >= len(devices):
-        print("Invalid choice.")
-        return
-
+    discovery_task.cancel()
     target_ip, target_port = devices[choice]
     print(f"Connecting to {target_ip}:{target_port}")
 
