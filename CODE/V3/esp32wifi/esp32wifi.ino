@@ -22,13 +22,19 @@ void setupWiFi() {
 }
 
 void handleUDPPacket(AsyncUDPPacket packet) {
-  uint32_t receiveTime = micros();
-  udp.writeTo(packet.data(), packet.length(), packet.remoteIP(), packet.remotePort());
-  uint32_t sendTime = micros();
-  
-  float processingTime = (sendTime - receiveTime) / 1000.0;
-  String message = String((char*)packet.data());
-  Serial.println(String(processingTime) + " ms" + " | " + "Echo: " + message);
+  if (strncmp((char*)packet.data(), "DISCOVER", packet.length()) == 0) {
+    String response = "ESP32:" + WiFi.localIP().toString();
+    packet.printf(response.c_str());
+    Serial.println("DISCOVERED: " + response);
+  } else {
+    uint32_t receiveTime = micros();
+    udp.writeTo(packet.data(), packet.length(), packet.remoteIP(), packet.remotePort());
+    uint32_t sendTime = micros();
+    
+    float processingTime = (sendTime - receiveTime) / 1000.0;
+    String message = String((char*)packet.data());
+    Serial.println(String(processingTime) + " ms" + " | " + "Echo: " + message);
+  }
 }
 
 void setupUDP() {

@@ -89,7 +89,7 @@ async def main():
     print(f"Connecting to {target_ip}:{target_port}")
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(10)  # Set a 1-second timeout
+    sock.settimeout(10)  # Set a 10-second timeout
 
     while True:
         message = input("Enter message to send (or 'quit' to exit): ")
