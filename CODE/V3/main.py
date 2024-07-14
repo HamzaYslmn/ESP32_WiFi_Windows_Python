@@ -44,17 +44,26 @@ async def discover_devices(devices):
 
 async def latency_test(sock, message, addr, iterations=ITERATIONS):
     latencies = []
+    loop = asyncio.get_event_loop()
 
-    for _ in range(iterations):
+    async def send_message():
         send_time = perf_counter_ns()
         sock.sendto(message.encode(), addr)
+        return send_time
+
+    async def receive_message():
+        data, _ = await loop.run_in_executor(None, sock.recvfrom, 1024)
+        receive_time = perf_counter_ns()
+        return data.decode(), receive_time
+
+    for _ in range(iterations):
+        send_time = await send_message()
         try:
-            data, _ = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
-            receive_time = perf_counter_ns()
+            data, receive_time = await asyncio.wait_for(receive_message(), timeout=1)
             rtt = (receive_time - send_time) / 1e6  # Convert to milliseconds
             latencies.append(rtt)
-            print(f"Received: {data.decode()}, RTT: {rtt:.3f} ms")
-        except socket.timeout:
+            print(f"Received: {data}, RTT: {rtt:.3f} ms")
+        except asyncio.TimeoutError:
             print("Timeout: No response received")
     
     if latencies:
