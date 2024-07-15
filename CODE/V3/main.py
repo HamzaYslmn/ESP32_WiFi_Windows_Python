@@ -46,33 +46,38 @@ async def terminal_mode(sock, target):
     async def listen():
         while True:
             try:
-                data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+                data = await asyncio.get_event_loop().run_in_executor(None, sock.recv, 1024)
                 receive_time = datetime.now()
-                print(f"{receive_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()}")
+                print(f"\r{receive_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()}")
+                print("> ", end="", flush=True)
             except socket.timeout:
                 pass
 
     async def send():
         while True:
-            message = await asyncio.get_event_loop().run_in_executor(None, input, "")
-            if message.lower() == 'q':
-                break
-            start_time = datetime.now()
-            sock.sendto(message.encode(), target)
-            print(f"{start_time.strftime('%H:%M:%S.%f')[:-3]}: Sent: {message}")
+            message = await asyncio.get_event_loop().run_in_executor(None, input, "> ")
+            if not message:
+                continue
+            elif message.lower() == 'q':
+                return
+            elif message == "cls":
+                print("\033[2J\033[H", end="")
+            else:
+                start_time = datetime.now()
+                await asyncio.get_event_loop().run_in_executor(None, sock.sendto, message.encode(), target)
+                print(f"{start_time.strftime('%H:%M:%S.%f')[:-3]}: Sent: {message}")
 
     listen_task = asyncio.create_task(listen())
     send_task = asyncio.create_task(send())
 
     try:
         await send_task
-    except KeyboardInterrupt or asyncio.CancelledError:
-        listen_task.cancel()
-        send_task.cancel()
+    except asyncio.CancelledError:
+        pass
     finally:
         listen_task.cancel()
         send_task.cancel()
-        return
+        await asyncio.gather(listen_task, return_exceptions=True)
         
 async def keyboard_mode(sock, target):
     return
