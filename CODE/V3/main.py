@@ -1,13 +1,11 @@
 import asyncio
 import socket
-import statistics
-from time import perf_counter_ns
+from datetime import datetime
 
 UDP_PORT = 11112
 BROADCAST_IP = '255.255.255.255'
-DISCOVERY_INTERVAL = 15  # Interval in seconds between each discovery broadcast
-BROADCAST_COUNT = 10  # Number of discovery messages to send in each broadcast
-ITERATIONS = 50
+DISCOVERY_INTERVAL = 15
+BROADCAST_COUNT = 10
 
 async def send_discover(sock):
     sock.sendto("DISCOVER".encode(), (BROADCAST_IP, UDP_PORT))
@@ -15,7 +13,7 @@ async def send_discover(sock):
 async def discover_devices(devices):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    sock.settimeout(0.5)
+    sock.settimeout(1)
 
     while True:
         tasks = [asyncio.create_task(send_discover(sock)) for _ in range(BROADCAST_COUNT)]
@@ -41,44 +39,28 @@ async def discover_devices(devices):
             except Exception as e:
                 print(f"Error: {e}")
             await asyncio.sleep(0.1)
+            
+async def terminal_mode(sock, target):
+    while True:
+        message = await asyncio.get_event_loop().run_in_executor(None, input, "Enter message to send (or 'q' to exit): ")
+        
+        if message.lower() == "q":
+            break
+        
+        start_time = datetime.now()
+        sock.sendto(message.encode(), target)
+        print(f"{start_time.strftime('%H:%M:%S.%f')[:-3]}: Sent: {message}")
+        
+        data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+        end_time = datetime.now()
+        elapsed_time = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
+        print(f"{end_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()} ({elapsed_time:.3f} ms)")
+             
+async def keyboard_mode(sock, target):
+    return
 
-async def latency_test(sock, message, addr, iterations=ITERATIONS):
-    latencies = []
-    loop = asyncio.get_event_loop()
-
-    async def send_message():
-        send_time = perf_counter_ns()
-        sock.sendto(message.encode(), addr)
-        return send_time
-
-    async def receive_message():
-        data, _ = await loop.run_in_executor(None, sock.recvfrom, 1024)
-        receive_time = perf_counter_ns()
-        return data.decode(), receive_time
-
-    for _ in range(iterations):
-        send_time = await send_message()
-        try:
-            data, receive_time = await asyncio.wait_for(receive_message(), timeout=1)
-            rtt = (receive_time - send_time) / 1e6  # Convert to milliseconds
-            latencies.append(rtt)
-            print(f"Received: {data}, RTT: {rtt:.3f} ms")
-        except asyncio.TimeoutError:
-            print("Timeout: No response received")
-    
-    if latencies:
-        avg_latency = statistics.mean(latencies)
-        min_latency = min(latencies)
-        max_latency = max(latencies)
-        std_dev = statistics.stdev(latencies) if len(latencies) > 1 else 0
-
-        print(f"\nLatency statistics over {iterations} iterations:")
-        print(f"Average: {avg_latency:.3f} ms")
-        print(f"Minimum: {min_latency:.3f} ms")
-        print(f"Maximum: {max_latency:.3f} ms")
-        print(f"Std Dev: {std_dev:.3f} ms")
-    else:
-        print("No valid latency measurements")
+async def latency_test(sock, message, target, iterations=100):
+    return
 
 async def main():
     devices = []
@@ -102,21 +84,25 @@ async def main():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.settimeout(10)  # Set a 10-second timeout
-
+    
+    print("\033[2J\033[H", end="")  # Clear the console
     while True:
-        message = input("Enter message to send (or 'q' to exit): ")
-        if message.lower() == 'q':
+        print("[1] Terminal Mode")   # send and receive messages asynchronously
+        print("[2] Keyboard Mode")   # listen asynchronously for key presses on the keyboard and send them to esp32, listen asynchronously for responses.
+        print("[3] Latency Test")    # send 100 messages and wait for a response to calculate the latency of the connection
+        
+        mode_choice = await asyncio.get_event_loop().run_in_executor(None, input, "Select mode (or 'q' to exit): ")
+        if mode_choice.lower() == 'q':
             break
-        elif not message:
+        elif mode_choice == "cls":
             print("\033[2J\033[H", end="")
             continue
-        elif message == "cls":
-            print("\033[2J\033[H", end="")
-            continue
-        elif message == "test":
+        elif mode_choice == "1":
+            await terminal_mode(sock, (target_ip, target_port))
+        elif mode_choice == "2":
+            await keyboard_mode(sock, (target_ip, target_port))
+        elif mode_choice == "3":
             await latency_test(sock, "PING", (target_ip, target_port))
-        else:
-            continue
 
     sock.close()
 
