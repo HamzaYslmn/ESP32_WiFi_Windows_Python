@@ -41,26 +41,46 @@ async def discover_devices(devices):
             await asyncio.sleep(0.1)
             
 async def terminal_mode(sock, target):
+    print("Terminal Mode\n")
     while True:
-        message = await asyncio.get_event_loop().run_in_executor(None, input, "Enter message to send (or 'q' to exit): ")
-        
-        if message.lower() == "q":
-            break
-        
+        message = await asyncio.get_event_loop().run_in_executor(None, input, "")
         start_time = datetime.now()
         sock.sendto(message.encode(), target)
         print(f"{start_time.strftime('%H:%M:%S.%f')[:-3]}: Sent: {message}")
-        
-        data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
-        end_time = datetime.now()
-        elapsed_time = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
-        print(f"{end_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()} ({elapsed_time:.3f} ms)")
-             
+        try:
+            data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+            end_time = datetime.now()
+            latency = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
+            print(f"{end_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()} ({latency:.3f} ms)")
+        except socket.timeout:
+            print(f"{datetime.now().strftime('%H:%M:%S.%f')[:-3]}: Timeout")
+
 async def keyboard_mode(sock, target):
     return
 
 async def latency_test(sock, message, target, iterations=100):
-    return
+    total_latency = 0
+    successful_iterations = 0
+
+    for i in range(iterations):
+        start_time = datetime.now()
+        sock.sendto(message.encode(), target)
+        
+        try:
+            data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+            end_time = datetime.now()
+            latency = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
+            total_latency += latency
+            successful_iterations += 1
+            print(f"Iteration {i+1}: {latency:.3f} ms")
+        except socket.timeout:
+            print(f"Iteration {i+1}: Timeout")
+
+    if successful_iterations > 0:
+        average_latency = total_latency / successful_iterations
+        print(f"\nAverage latency over {successful_iterations} successful iterations: {average_latency:.3f} ms")
+    else:
+        print("\nNo successful iterations. Check your connection.")
 
 async def main():
     devices = []
@@ -94,16 +114,14 @@ async def main():
         mode_choice = await asyncio.get_event_loop().run_in_executor(None, input, "Select mode (or 'q' to exit): ")
         if mode_choice.lower() == 'q':
             break
-        elif mode_choice == "cls":
-            print("\033[2J\033[H", end="")
-            continue
         elif mode_choice == "1":
             await terminal_mode(sock, (target_ip, target_port))
         elif mode_choice == "2":
             await keyboard_mode(sock, (target_ip, target_port))
         elif mode_choice == "3":
             await latency_test(sock, "PING", (target_ip, target_port))
-
+        else:
+            print("\033[2J\033[H", end="")
     sock.close()
 
 if __name__ == "__main__":
