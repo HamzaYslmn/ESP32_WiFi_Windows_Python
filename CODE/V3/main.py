@@ -42,19 +42,38 @@ async def discover_devices(devices):
             
 async def terminal_mode(sock, target):
     print("Terminal Mode\n")
-    while True:
-        message = await asyncio.get_event_loop().run_in_executor(None, input, "")
-        start_time = datetime.now()
-        sock.sendto(message.encode(), target)
-        print(f"{start_time.strftime('%H:%M:%S.%f')[:-3]}: Sent: {message}")
-        try:
-            data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
-            end_time = datetime.now()
-            latency = (end_time - start_time).total_seconds() * 1000  # Convert to milliseconds
-            print(f"{end_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()} ({latency:.3f} ms)")
-        except socket.timeout:
-            print(f"{datetime.now().strftime('%H:%M:%S.%f')[:-3]}: Timeout")
+    
+    async def listen():
+        while True:
+            try:
+                data, addr = await asyncio.get_event_loop().run_in_executor(None, sock.recvfrom, 1024)
+                receive_time = datetime.now()
+                print(f"{receive_time.strftime('%H:%M:%S.%f')[:-3]}: Received: {data.decode()}")
+            except socket.timeout:
+                pass
 
+    async def send():
+        while True:
+            message = await asyncio.get_event_loop().run_in_executor(None, input, "")
+            if message.lower() == 'q':
+                break
+            start_time = datetime.now()
+            sock.sendto(message.encode(), target)
+            print(f"{start_time.strftime('%H:%M:%S.%f')[:-3]}: Sent: {message}")
+
+    listen_task = asyncio.create_task(listen())
+    send_task = asyncio.create_task(send())
+
+    try:
+        await send_task
+    except KeyboardInterrupt or asyncio.CancelledError:
+        listen_task.cancel()
+        send_task.cancel()
+    finally:
+        listen_task.cancel()
+        send_task.cancel()
+        return
+        
 async def keyboard_mode(sock, target):
     return
 
