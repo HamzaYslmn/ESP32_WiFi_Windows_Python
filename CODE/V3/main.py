@@ -5,7 +5,7 @@ from datetime import datetime
 UDP_PORT = 11112
 BROADCAST_IP = '255.255.255.255'
 DISCOVERY_INTERVAL = 15
-BROADCAST_COUNT = 10
+BROADCAST_COUNT = 50
 
 async def send_discover(sock):
     sock.sendto("DISCOVER".encode(), (BROADCAST_IP, UDP_PORT))
